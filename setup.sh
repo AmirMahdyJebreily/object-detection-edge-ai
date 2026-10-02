@@ -14,12 +14,13 @@ sudo add-apt-repository universe || true
 sudo apt update
 
 echo "[2/4] Installing system dependencies..."
-sudo apt install -y python3-numpy python3-pip python3-venv wget || true
+sudo apt install -y python3-numpy python3-pip python3-venv python3-psutil wget || true
 sudo apt install -y python3-opencv || echo "Warning: python3-opencv not found in apt. We will attempt to install it via pip/piwheels."
 
 echo "[3/4] Setting up Virtual Environment (venv)..."
 if [ ! -d "venv" ]; then
-    python3 -m venv venv || echo "Warning: python3-venv might not be supported on this old version. Continuing without it..."
+    # CRITICAL: --system-site-packages allows the venv to use python3-numpy, opencv and psutil from apt!
+    python3 -m venv --system-site-packages venv || echo "Warning: python3-venv might not be supported on this old version. Continuing without it..."
 fi
 # Activate venv if it was successfully created
 [ -f "venv/bin/activate" ] && source venv/bin/activate
