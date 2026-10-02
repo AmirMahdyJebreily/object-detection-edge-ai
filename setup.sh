@@ -3,6 +3,10 @@
 # Exit on any error to prevent cascading failures
 set -e
 
+# Fix for "locale.Error: unsupported locale setting" on minimal Linux installations
+export LC_ALL=C
+export LANG=C
+
 echo "===================================================="
 echo "  Setting up Conveyor Belt Object Detection on Edge "
 echo "===================================================="
