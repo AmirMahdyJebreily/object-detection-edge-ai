@@ -3,14 +3,20 @@ import logging
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
 from dataclasses import dataclass
+import cv2
 
 try:
-    import mediapipe as mp
-    from mediapipe.tasks import python
-    from mediapipe.tasks.python import vision
-    MEDIAPIPE_AVAILABLE = True
+    # Try importing tflite_runtime (for edge devices like NanoPi/Raspberry Pi)
+    import tflite_runtime.interpreter as tflite
+    TFLITE_AVAILABLE = True
 except ImportError:
-    MEDIAPIPE_AVAILABLE = False
+    try:
+        # Fallback to full tensorflow (for Desktop testing)
+        import tensorflow as tf
+        tflite = tf.lite
+        TFLITE_AVAILABLE = True
+    except ImportError:
+        TFLITE_AVAILABLE = False
 
 
 logger = logging.getLogger(__name__)
@@ -30,130 +36,155 @@ class ModelAdapter(abc.ABC):
 
     @abc.abstractmethod
     def load_model(self, model_path: str) -> None:
-        """Loads the model from the specified path."""
         pass
 
     @abc.abstractmethod
     def preprocess(self, image: np.ndarray) -> Any:
-        """Preprocesses the image for the model."""
         pass
 
     @abc.abstractmethod
     def infer(self, preprocessed_input: Any) -> Any:
-        """Runs inference on the preprocessed input."""
         pass
 
     @abc.abstractmethod
     def postprocess(self, raw_output: Any, original_image_shape: Tuple[int, int]) -> List[Detection]:
-        """Converts raw model output into a list of Detection objects."""
         pass
     
     def predict(self, image: np.ndarray) -> List[Detection]:
-        """End-to-end prediction pipeline: preprocess -> infer -> postprocess."""
         preprocessed = self.preprocess(image)
         raw_output = self.infer(preprocessed)
         return self.postprocess(raw_output, image.shape[:2])
 
     @abc.abstractmethod
     def get_input_shape(self) -> Tuple[int, int]:
-        """Returns the expected input shape (width, height) for the model."""
         pass
 
     @abc.abstractmethod
     def get_model_info(self) -> Dict[str, Any]:
-        """Returns metadata about the loaded model."""
         pass
 
 
-class MediaPipeModelAdapter(ModelAdapter):
-    """Concrete implementation of ModelAdapter using MediaPipe Object Detection."""
+class TFLiteModelAdapter(ModelAdapter):
+    """Concrete implementation using tflite_runtime (Zero MediaPipe dependency)."""
 
     def __init__(self, score_threshold: float = 0.5, max_results: int = 5):
-        """
-        Initializes the MediaPipe model adapter.
-        
-        Args:
-            score_threshold: Confidence threshold for detections.
-            max_results: Maximum number of objects to detect.
-        """
-        if not MEDIAPIPE_AVAILABLE:
-            raise ImportError("MediaPipe is not installed. Please install it using 'pip install mediapipe'.")
+        if not TFLITE_AVAILABLE:
+            raise ImportError("tflite_runtime or tensorflow is not installed.")
             
         self.score_threshold = score_threshold
         self.max_results = max_results
-        self.detector: Optional[vision.ObjectDetector] = None
-        self.model_path: str = ""
+        self.interpreter = None
+        self.input_details = None
+        self.output_details = None
+        self.model_path = ""
+        self.input_shape = (320, 320) # Will be updated on load
+        self.is_quantized = False
+        
+        # Sample COCO labels (IDs usually shift by 1 depending on model)
+        self.labels = {0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 
+                       4: 'airplane', 5: 'bus', 6: 'train', 7: 'truck', 8: 'boat', 
+                       39: 'bottle', 43: 'knife', 47: 'apple'}
 
     def load_model(self, model_path: str) -> None:
-        """Loads the MediaPipe TFLite model."""
-        try:
-            self.model_path = model_path
-            base_options = python.BaseOptions(model_asset_path=model_path)
-            options = vision.ObjectDetectorOptions(
-                base_options=base_options,
-                score_threshold=self.score_threshold,
-                max_results=self.max_results
-            )
-            self.detector = vision.ObjectDetector.create_from_options(options)
-            logger.info(f"Successfully loaded MediaPipe model from {model_path}")
-        except Exception as e:
-            logger.error(f"Error loading MediaPipe model: {e}")
-            raise
-
-    def preprocess(self, image: np.ndarray) -> mp.Image:
-        """Converts a numpy array (BGR or RGB) to a MediaPipe Image."""
-        # Assume input is BGR (OpenCV default), MediaPipe expects RGB
-        if len(image.shape) == 3 and image.shape[2] == 3:
-            # Need to create contiguous array for MediaPipe
-            rgb_image = np.ascontiguousarray(image[:, :, ::-1])
-        else:
-            rgb_image = np.ascontiguousarray(image)
-            
-        return mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
-
-    def infer(self, preprocessed_input: mp.Image) -> vision.ObjectDetectorResult:
-        """Runs inference using the MediaPipe detector."""
-        if self.detector is None:
-            raise RuntimeError("Model is not loaded. Call load_model() first.")
+        self.model_path = model_path
+        self.interpreter = tflite.Interpreter(model_path=model_path)
+        self.interpreter.allocate_tensors()
         
-        return self.detector.detect(preprocessed_input)
+        self.input_details = self.interpreter.get_input_details()
+        self.output_details = self.interpreter.get_output_details()
+        
+        shape = self.input_details[0]['shape']
+        self.input_shape = (shape[2], shape[1]) # (width, height)
+        self.is_quantized = self.input_details[0]['dtype'] in [np.uint8, np.int8]
+        logger.info(f"Loaded TFLite model from {model_path}. Quantized: {self.is_quantized}")
 
-    def postprocess(self, raw_output: vision.ObjectDetectorResult, original_image_shape: Tuple[int, int]) -> List[Detection]:
-        """Converts MediaPipe detection results to standard Detection objects."""
+    def preprocess(self, image: np.ndarray) -> np.ndarray:
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        resized = cv2.resize(rgb_image, self.input_shape)
+        input_data = np.expand_dims(resized, axis=0)
+        
+        if not self.is_quantized:
+            input_data = (np.float32(input_data) - 127.5) / 127.5
+            
+        # Ensure it matches model expectation (uint8 vs int8)
+        if self.input_details[0]['dtype'] == np.int8:
+            input_data = input_data.astype(np.int8)
+        elif self.input_details[0]['dtype'] == np.uint8:
+            input_data = input_data.astype(np.uint8)
+            
+        return input_data
+
+    def infer(self, preprocessed_input: np.ndarray) -> List[np.ndarray]:
+        if self.interpreter is None:
+            raise RuntimeError("Model not loaded.")
+            
+        self.interpreter.set_tensor(self.input_details[0]['index'], preprocessed_input)
+        self.interpreter.invoke()
+        
+        outputs = []
+        for out in self.output_details:
+            outputs.append(self.interpreter.get_tensor(out['index']))
+        return outputs
+
+    def postprocess(self, raw_output: List[np.ndarray], original_image_shape: Tuple[int, int]) -> List[Detection]:
+        # Try to identify boxes, classes, scores based on tensor shapes
+        boxes = None
+        classes = None
+        scores = None
+        
+        for out in raw_output:
+            if len(out.shape) == 3 and out.shape[2] == 4:
+                boxes = out[0]
+            elif len(out.shape) == 2 or (len(out.shape) == 3 and out.shape[2] == 1):
+                out_sq = np.squeeze(out)
+                if np.max(out_sq) <= 1.0 and np.any(out_sq > 0):
+                    scores = out_sq
+                else:
+                    classes = out_sq
+
         detections = []
-        
-        # original_image_shape is (height, width)
-        
-        for detection in raw_output.detections:
-            # Get bounding box
-            bbox = detection.bounding_box
-            x_min = int(bbox.origin_x)
-            y_min = int(bbox.origin_y)
-            width = int(bbox.width)
-            height = int(bbox.height)
+        if boxes is None or scores is None or classes is None:
+            return detections
             
-            # Get category (take the highest scoring one)
-            category = detection.categories[0]
+        img_h, img_w = original_image_shape
+        
+        for i in range(len(scores)):
+            if i >= self.max_results:
+                break
+                
+            score = float(scores[i])
+            if score < self.score_threshold:
+                continue
+                
+            class_id = int(classes[i])
+            # Default tflite output: [ymin, xmin, ymax, xmax]
+            ymin, xmin, ymax, xmax = boxes[i]
             
-            det = Detection(
-                class_id=category.index if hasattr(category, 'index') else -1,
-                class_name=category.category_name,
-                confidence=category.score,
-                bbox=(x_min, y_min, width, height)
-            )
+            x_min = int(xmin * img_w)
+            y_min = int(ymin * img_h)
+            x_max = int(xmax * img_w)
+            y_max = int(ymax * img_h)
+            
+            width = x_max - x_min
+            height = y_max - y_min
+            
+            class_name = self.labels.get(class_id, f"Object_{class_id}")
+            
+            det = Detection(class_id, class_name, score, (x_min, y_min, width, height))
             detections.append(det)
             
         return detections
 
     def get_input_shape(self) -> Tuple[int, int]:
-        """MediaPipe handles resizing internally, returning dynamic/unknown."""
-        return (-1, -1)
+        return self.input_shape
 
     def get_model_info(self) -> Dict[str, Any]:
-        """Returns info about the MediaPipe model."""
         return {
-            "type": "MediaPipe Object Detector",
+            "type": "TFLite Runtime Object Detector",
             "path": self.model_path,
-            "score_threshold": self.score_threshold,
-            "max_results": self.max_results
+            "quantized": self.is_quantized,
+            "score_threshold": self.score_threshold
         }
+
+# Alias so we don't have to rename imports in main.py, server.py, etc.
+MediaPipeModelAdapter = TFLiteModelAdapter
