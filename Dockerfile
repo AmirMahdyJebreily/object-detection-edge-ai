@@ -31,4 +31,4 @@ COPY . .
 EXPOSE 5000
 
 # Run the native server when the container launches
-CMD ["python", "native_server.py", "--monitor"]
+CMD ["python", "native_server.py"]
