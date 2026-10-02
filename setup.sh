@@ -29,6 +29,8 @@ if [ "$PYTHON_VERSION" = "3.5" ] && [ "$ARCH" = "armv7l" ]; then
     echo "Skipping venv creation on NanoPi (Python 3.5) to avoid ensurepip errors."
     echo "We will install packages globally using --user."
     PIP_CMD="python3 -m pip install --user"
+    # Upgrade pip to the latest version that supports Python 3.5 (20.3.4) to fix wheel issues
+    $PIP_CMD --upgrade "pip<21.0" setuptools wheel || true
 else
     if [ ! -d "venv" ]; then
         python3 -m venv --system-site-packages venv || true
@@ -42,7 +44,7 @@ echo "[4/4] Installing Python requirements..."
 if [ "$PYTHON_VERSION" = "3.5" ] && [ "$ARCH" = "armv7l" ]; then
     echo "Detected Python 3.5 on armv7l (NanoPi)."
     echo "Installing pre-built tflite_runtime wheel..."
-    $PIP_CMD https://github.com/google-coral/pycoral/releases/download/v1.0.1/tflite_runtime-2.5.0-cp35-cp35m-linux_armv7l.whl
+    $PIP_CMD https://github.com/google-coral/pycoral/releases/download/v1.0.1/tflite_runtime-2.5.0-cp35-cp35m-linux_armv7l.whl --extra-index-url https://www.piwheels.org/simple
     
     # Try to get OpenCV from piwheels (compiled for 32-bit ARM) in case apt failed
     $PIP_CMD opencv-python --extra-index-url https://www.piwheels.org/simple || echo "OpenCV pip install failed, hoping apt worked..."
