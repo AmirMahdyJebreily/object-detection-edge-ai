@@ -22,6 +22,7 @@ class TrackedObject:
     def update(self, detection: Detection) -> None:
         """Updates the track with a new detection."""
         self.missed_frames = 0
+        self.last_bbox = detection.bbox
         centroid = self._get_centroid(detection.bbox)
         self.history.append(centroid)
 

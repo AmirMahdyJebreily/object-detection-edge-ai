@@ -12,7 +12,7 @@ class CameraConfig:
 @dataclass
 class ModelConfig:
     # Default model path assumes running from project root
-    model_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "efficientdet_lite0.tflite")
+    model_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "coco_ssd.tflite")
     score_threshold: float = 0.5
     max_results: int = 10
     quantized: bool = True # Typically True for Edge TPU / microcontrollers

@@ -45,9 +45,12 @@ class Visualizer:
         for obj_id, track in tracks.items():
             color = self._get_color(obj_id)
             
-            # If we don't store the bounding box in the track, we just draw the trajectory and an ID
-            # In a more complete implementation, TrackedObject should hold the latest bbox.
-            # Here we just draw the trajectory points.
+            # Draw bounding box if available
+            if hasattr(track, 'last_bbox'):
+                x, y, w, h = track.last_bbox
+                cv2.rectangle(output, (x, y), (x + w, y + h), color, 2)
+            
+            # Draw the trajectory points
             
             history = list(track.history)
             if len(history) > 1:
