@@ -1,28 +1,23 @@
-# Use an official Python runtime as a parent image, optimized for 32-bit ARM (NanoPi/Raspberry Pi)
-# For desktop testing (x86_64), Docker will automatically pull the corresponding x86_64 version.
-FROM python:3.9-slim
+# Use Ubuntu 16.04 which has glibc 2.23 and Python 3.5
+FROM ubuntu:16.04
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies required for OpenCV
+# Install system dependencies required for OpenCV 2.4.9 and Python 3.5
 RUN apt-get update && apt-get install -y \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libv4l-0 \
+    python3 \
+    python3-pip \
+    python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt ./
 
-# Install python packages
-# Note: We use opencv-python-headless to avoid heavy GUI dependencies (X11) in the container
-RUN pip install --no-cache-dir --upgrade pip && \
+# Install python packages (filter out opencv-python as we get it from apt)
+RUN pip3 install --no-cache-dir --upgrade "pip<21" setuptools && \
     grep -vE 'opencv-python' requirements.txt > requirements_filtered.txt && \
-    pip install --no-cache-dir -r requirements_filtered.txt && \
-    pip install --no-cache-dir opencv-python-headless tflite-runtime --extra-index-url https://www.piwheels.org/simple
+    pip3 install --no-cache-dir -r requirements_filtered.txt
 
 # Copy the rest of the application code
 COPY . .
@@ -31,4 +26,4 @@ COPY . .
 EXPOSE 5000
 
 # Run the native server when the container launches
-CMD ["python", "native_server.py"]
+CMD ["python3", "native_server.py"]
