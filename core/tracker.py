@@ -1,7 +1,6 @@
 import math
 import logging
 import numpy as np
-from typing import List, Dict, Tuple, Optional
 from collections import deque
 
 from adapters.model_adapter import Detection
@@ -11,7 +10,8 @@ logger = logging.getLogger(__name__)
 class TrackedObject:
     """Represents an object being tracked across frames."""
     
-    def __init__(self, object_id: int, initial_detection: Detection, max_history: int = 30):
+    def __init__(self, object_id, initial_detection, max_history=30):
+        # type: (int, Detection, int) -> None
         self.object_id = object_id
         self.class_name = initial_detection.class_name
         self.history = deque(maxlen=max_history)
@@ -19,18 +19,21 @@ class TrackedObject:
         
         self.update(initial_detection)
 
-    def update(self, detection: Detection) -> None:
+    def update(self, detection):
+        # type: (Detection) -> None
         """Updates the track with a new detection."""
         self.missed_frames = 0
         self.last_bbox = detection.bbox
         centroid = self._get_centroid(detection.bbox)
         self.history.append(centroid)
 
-    def get_latest_centroid(self) -> Tuple[int, int]:
+    def get_latest_centroid(self):
+        # type: () -> tuple
         """Returns the most recent centroid."""
         return self.history[-1] if self.history else (0, 0)
 
-    def _get_centroid(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
+    def _get_centroid(self, bbox):
+        # type: (tuple) -> tuple
         """Calculates the center (x, y) of a bounding box."""
         x, y, w, h = bbox
         return (x + w // 2, y + h // 2)
@@ -42,7 +45,8 @@ class SimpleCentroidTracker:
     Suitable for objects moving in a predictable manner like on a conveyor belt.
     """
 
-    def __init__(self, max_distance: float = 50.0, max_disappeared: int = 5, max_history: int = 30):
+    def __init__(self, max_distance=50.0, max_disappeared=5, max_history=30):
+        # type: (float, int, int) -> None
         """
         Initializes the tracker.
         
@@ -52,13 +56,14 @@ class SimpleCentroidTracker:
             max_history: Number of historical points to keep for trajectory.
         """
         self.next_object_id = 0
-        self.tracks: Dict[int, TrackedObject] = {}
+        self.tracks = {}
         
         self.max_distance = max_distance
         self.max_disappeared = max_disappeared
         self.max_history = max_history
 
-    def update(self, detections: List[Detection]) -> Dict[int, TrackedObject]:
+    def update(self, detections):
+        # type: (list) -> dict
         """
         Updates the tracker with new detections.
         
@@ -138,20 +143,23 @@ class SimpleCentroidTracker:
                 
         return self.tracks
 
-    def _register(self, detection: Detection) -> None:
+    def _register(self, detection):
+        # type: (Detection) -> None
         """Registers a new object."""
         self.tracks[self.next_object_id] = TrackedObject(
             self.next_object_id, detection, self.max_history
         )
         self.next_object_id += 1
 
-    def get_trajectory(self, object_id: int) -> List[Tuple[int, int]]:
+    def get_trajectory(self, object_id):
+        # type: (int) -> list
         """Gets the trajectory points for a specific object."""
         if object_id in self.tracks:
             return list(self.tracks[object_id].history)
         return []
 
-    def is_moving_anomaly(self, object_id: int) -> bool:
+    def is_moving_anomaly(self, object_id):
+        # type: (int) -> bool
         """
         Detects if an object has anomalous movement (e.g., sudden jump).
         Placeholder logic for a conveyor belt use case.

@@ -1,7 +1,6 @@
 import logging
 import threading
 import time
-from typing import List, Optional, Tuple
 import numpy as np
 
 from adapters.camera_adapter import CameraAdapter
@@ -15,7 +14,8 @@ class ObjectDetector:
     Runs a detection loop in a separate thread.
     """
 
-    def __init__(self, camera: CameraAdapter, model: ModelAdapter):
+    def __init__(self, camera, model):
+        # type: (CameraAdapter, ModelAdapter) -> None
         """
         Initializes the ObjectDetector.
         
@@ -27,14 +27,15 @@ class ObjectDetector:
         self.model = model
         
         self.is_running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread = None
         self._lock = threading.Lock()
         
-        self.latest_frame: Optional[np.ndarray] = None
-        self.latest_detections: List[Detection] = []
-        self.current_fps: float = 0.0
+        self.latest_frame = None
+        self.latest_detections = []
+        self.current_fps = 0.0
 
-    def start(self) -> None:
+    def start(self):
+        # type: () -> None
         """Starts the continuous detection loop in a background thread."""
         if self.is_running:
             logger.warning("Detector is already running.")
@@ -45,11 +46,13 @@ class ObjectDetector:
             return
 
         self.is_running = True
-        self._thread = threading.Thread(target=self._detection_loop, daemon=True)
+        self._thread = threading.Thread(target=self._detection_loop)
+        self._thread.daemon = True
         self._thread.start()
         logger.info("Detection loop started.")
 
-    def stop(self) -> None:
+    def stop(self):
+        # type: () -> None
         """Stops the detection loop and releases resources."""
         if not self.is_running:
             return
@@ -61,7 +64,8 @@ class ObjectDetector:
         self.camera.release()
         logger.info("Detection loop stopped.")
 
-    def process_single_frame(self) -> Tuple[Optional[np.ndarray], List[Detection]]:
+    def process_single_frame(self):
+        # type: () -> tuple
         """Processes a single frame synchronously (useful for notebooks/testing)."""
         frame = self.camera.capture_frame()
         if frame is None:
@@ -70,7 +74,8 @@ class ObjectDetector:
         detections = self.model.predict(frame)
         return frame, detections
 
-    def _detection_loop(self) -> None:
+    def _detection_loop(self):
+        # type: () -> None
         """The internal loop running in a separate thread."""
         prev_time = time.time()
         fps_filter = 0.9 # Smoothing factor for FPS calculation
@@ -103,7 +108,7 @@ class ObjectDetector:
                 self.current_fps = (fps_filter * self.current_fps) + ((1 - fps_filter) * fps)
                 
             except Exception as e:
-                logger.error(f"Error in detection loop: {e}")
+                logger.error("Error in detection loop: {0}".format(e))
                 time.sleep(0.1)
                 
             # Sleep to cap the frame rate and save CPU cycles
@@ -111,7 +116,8 @@ class ObjectDetector:
             if elapsed < target_interval:
                 time.sleep(target_interval - elapsed)
 
-    def get_latest_results(self) -> Tuple[Optional[np.ndarray], List[Detection], float]:
+    def get_latest_results(self):
+        # type: () -> tuple
         """
         Retrieves the latest frame, detections, and calculated FPS.
         Thread-safe.

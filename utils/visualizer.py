@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from typing import List, Dict, Tuple
 
 from adapters.model_adapter import Detection
 from core.tracker import TrackedObject
@@ -16,11 +15,13 @@ class Visualizer:
             (192, 192, 192), (128, 128, 128), (128, 0, 0)
         ]
 
-    def _get_color(self, object_id: int) -> Tuple[int, int, int]:
+    def _get_color(self, object_id):
+        # type: (int) -> tuple
         """Assigns a consistent color based on object ID."""
         return self.colors[object_id % len(self.colors)]
 
-    def draw_detections(self, image: np.ndarray, detections: List[Detection]) -> np.ndarray:
+    def draw_detections(self, image, detections):
+        # type: (np.ndarray, list) -> np.ndarray
         """Draws bounding boxes and labels for untracked detections."""
         output = image.copy()
         for det in detections:
@@ -31,14 +32,15 @@ class Visualizer:
             cv2.rectangle(output, (x, y), (x + w, y + h), color, 2)
             
             # Draw label
-            label = f"{det.class_name}: {det.confidence:.2f}"
+            label = "{0}: {1:.2f}".format(det.class_name, det.confidence)
             (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             cv2.rectangle(output, (x, y - text_h - 5), (x + text_w, y), color, -1)
             cv2.putText(output, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
             
         return output
 
-    def draw_tracked_objects(self, image: np.ndarray, tracks: Dict[int, TrackedObject]) -> np.ndarray:
+    def draw_tracked_objects(self, image, tracks):
+        # type: (np.ndarray, dict) -> np.ndarray
         """Draws tracked objects and their trajectories."""
         output = image.copy()
         
@@ -68,22 +70,24 @@ class Visualizer:
                 cv2.circle(output, latest_pt, 4, color, -1)
                 
                 # Draw ID label
-                label = f"ID: {obj_id} {track.class_name}"
+                label = "ID: {0} {1}".format(obj_id, track.class_name)
                 cv2.putText(output, label, (latest_pt[0] - 10, latest_pt[1] - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                 
         return output
 
-    def draw_anomaly_alert(self, image: np.ndarray, message: str) -> np.ndarray:
+    def draw_anomaly_alert(self, image, message):
+        # type: (np.ndarray, str) -> np.ndarray
         """Draws an alert message on the screen."""
         output = image.copy()
-        cv2.putText(output, f"ALERT: {message}", (50, 50), 
+        cv2.putText(output, "ALERT: {0}".format(message), (50, 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
         return output
         
-    def draw_fps(self, image: np.ndarray, fps: float) -> np.ndarray:
+    def draw_fps(self, image, fps):
+        # type: (np.ndarray, float) -> np.ndarray
         """Draws FPS on top left corner."""
         output = image.copy()
-        cv2.putText(output, f"FPS: {fps:.1f}", (10, 30), 
+        cv2.putText(output, "FPS: {0:.1f}".format(fps), (10, 30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         return output

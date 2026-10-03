@@ -142,7 +142,7 @@ class VideoStreamHandler(BaseHTTPRequestHandler):
                     # Check for anomalies and alert
                     for obj_id in tracks:
                         if tracker.is_moving_anomaly(obj_id):
-                            display_frame = visualizer.draw_anomaly_alert(display_frame, f"Anomaly ID {obj_id}")
+                            display_frame = visualizer.draw_anomaly_alert(display_frame, "Anomaly ID {0}".format(obj_id))
                     
                     # Draw tracks & FPS
                     display_frame = visualizer.draw_tracked_objects(display_frame, tracks)
@@ -165,7 +165,7 @@ class VideoStreamHandler(BaseHTTPRequestHandler):
                     
                     time.sleep(0.01)
             except Exception as e:
-                logger.info(f"Stream disconnected: {e}")
+                logger.info("Stream disconnected: {0}".format(e))
         else:
             self.send_error(404)
 
@@ -173,12 +173,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
     pass
 
-def init_system(camera_index: int, model_path: str, threshold: float):
+def init_system(camera_index, model_path, threshold):
     """Initialize the object detection components."""
     global detector, tracker, visualizer
     
     if not os.path.exists(model_path):
-        logger.error(f"Model file not found: {model_path}")
+        logger.error("Model file not found: {0}".format(model_path))
         sys.exit(1)
 
     logger.info("Initializing components for native web server...")
@@ -188,7 +188,7 @@ def init_system(camera_index: int, model_path: str, threshold: float):
     try:
         model.load_model(model_path)
     except Exception as e:
-        logger.error(f"Failed to load model: {e}")
+        logger.error("Failed to load model: {0}".format(e))
         sys.exit(1)
 
     detector = ObjectDetector(camera=camera, model=model)
@@ -229,7 +229,7 @@ if __name__ == '__main__':
         
         # Start Native web server
         server = ThreadedHTTPServer((args.host, args.port), VideoStreamHandler)
-        logger.info(f"Starting native web server at http://{args.host}:{args.port}")
+        logger.info("Starting native web server at http://{0}:{1}".format(args.host, args.port))
         server.serve_forever()
         
     except KeyboardInterrupt:
